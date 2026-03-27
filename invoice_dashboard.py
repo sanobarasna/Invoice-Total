@@ -1,19 +1,19 @@
 # ==========================================================
 # invoice_dashboard.py — Invoice Totals Dashboard
 #
-# Reads from the `invoices` Supabase table (synced by
-# sync_invoices.py) and displays invoice / sale totals
-# grouped by supplier and date.
+# Uses httpx to call the Supabase REST API directly —
+# no supabase package needed, avoids the gotrue/httpx
+# proxy TypeError on Python 3.14.
 #
 # Secrets required in .streamlit/secrets.toml:
 #   SUPABASE_URL = "https://xxxx.supabase.co"
 #   SUPABASE_KEY = "your-anon-public-key"
 # ==========================================================
 
-import io
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from pathlib import Path
 
+import httpx
 import pytz
 import streamlit as st
 import pandas as pd
@@ -21,7 +21,7 @@ import pandas as pd
 st.set_page_config(page_title="Invoice Dashboard", layout="wide")
 
 # ----------------------------------------------------------
-# CSS  (reuse styles.css if it exists alongside this file)
+# CSS
 # ----------------------------------------------------------
 def load_css():
     css_file = Path(__file__).parent / "styles.css"
@@ -33,7 +33,7 @@ load_css()
 st.title("🧾 Invoice Dashboard")
 
 # ==========================================================
-# SUPABASE CONNECTION
+# SECRETS
 # ==========================================================
 def get_secret(key, default=None):
     try:
@@ -52,22 +52,30 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     st.stop()
 
 # ==========================================================
-# PAGINATED FETCH
+# PAGINATED FETCH — direct REST via httpx, no supabase pkg
 # ==========================================================
 def fetch_all(table: str, columns: str = "*") -> list[dict]:
-    from supabase import create_client
-    client   = create_client(SUPABASE_URL, SUPABASE_KEY)
+    headers = {
+        "apikey":        SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Accept":        "application/json",
+        "Range-Unit":    "items",
+        "Prefer":        "count=none",
+    }
     page     = 0
     size     = 1000
     all_rows = []
     while True:
-        result = (
-            client.table(table)
-            .select(columns)
-            .range(page * size, (page + 1) * size - 1)
-            .execute()
+        start = page * size
+        end   = start + size - 1
+        resp  = httpx.get(
+            f"{SUPABASE_URL}/rest/v1/{table}",
+            params={"select": columns},
+            headers={**headers, "Range": f"{start}-{end}"},
+            timeout=30,
         )
-        batch = result.data or []
+        resp.raise_for_status()
+        batch = resp.json()
         all_rows.extend(batch)
         if len(batch) < size:
             break
@@ -80,7 +88,7 @@ def fetch_all(table: str, columns: str = "*") -> list[dict]:
 # ==========================================================
 @st.cache_data(ttl=300)
 def load_invoices() -> pd.DataFrame:
-    rows = fetch_all("invoices", "date, supplier, invoice_total, total_sale")
+    rows = fetch_all("invoices", "date,supplier,invoice_total,total_sale")
     df   = pd.DataFrame(rows)
     if df.empty:
         return pd.DataFrame(columns=["date", "supplier", "invoice_total", "total_sale"])
@@ -129,10 +137,8 @@ if df_raw.empty:
 min_date = df_raw["date"].min().date()
 max_date = df_raw["date"].max().date()
 
-# Default to current month
-today        = date.today()
+today         = date.today()
 default_start = today.replace(day=1)
-default_end   = today
 
 if "inv_clear" not in st.session_state:
     st.session_state.inv_clear = 0
@@ -203,7 +209,7 @@ st.markdown("---")
 # ==========================================================
 st.markdown("### 📅 Grouped Totals")
 
-gcol1, gcol2, _ = st.columns([3, 5, 2])
+gcol1, _ = st.columns([4, 6])
 with gcol1:
     st.markdown("<div style='padding-top:4px; font-size:14px; color:#555'>Group by</div>",
                 unsafe_allow_html=True)
@@ -230,19 +236,15 @@ with gcol1:
 
 group_mode = st.session_state.inv_group
 
-# ----------------------------------------------------------
 # Build period label
-# ----------------------------------------------------------
 df_grp = df.copy()
-
 if group_mode == "Daily":
     df_grp["Period"] = df_grp["date"].dt.strftime("%Y-%m-%d")
 elif group_mode == "Weekly":
-    # Label = Monday of the week
     df_grp["Period"] = (
         df_grp["date"] - pd.to_timedelta(df_grp["date"].dt.weekday, unit="D")
     ).dt.strftime("Week of %b %d, %Y")
-else:  # Monthly
+else:
     df_grp["Period"] = df_grp["date"].dt.strftime("%B %Y")
 
 # ==========================================================
@@ -251,19 +253,18 @@ else:  # Monthly
 main_grp = (
     df_grp.groupby(["supplier", "Period"])
     .agg(
-        Entries        = ("invoice_total", "count"),
-        Invoice_Total  = ("invoice_total", "sum"),
-        Sale_Total     = ("total_sale",    "sum"),
+        Entries       = ("invoice_total", "count"),
+        Invoice_Total = ("invoice_total", "sum"),
+        Sale_Total    = ("total_sale",    "sum"),
     )
     .reset_index()
 )
-main_grp["Profit"]    = main_grp["Sale_Total"]   - main_grp["Invoice_Total"]
-main_grp["Profit %"]  = main_grp.apply(
+main_grp["Profit"]   = main_grp["Sale_Total"] - main_grp["Invoice_Total"]
+main_grp["Profit %"] = main_grp.apply(
     lambda r: f"{r['Profit'] / r['Sale_Total'] * 100:.1f}%" if r["Sale_Total"] else "—", axis=1
 )
 main_grp = main_grp.rename(columns={
     "supplier":      "Supplier",
-    "Period":        "Period",
     "Entries":       "# Entries",
     "Invoice_Total": "Invoice Total ($)",
     "Sale_Total":    "Sale Total ($)",
@@ -273,8 +274,8 @@ main_grp = main_grp.sort_values(["Supplier", "Period"]).reset_index(drop=True)
 main_grp.index += 1
 
 st.info(
-    f"Showing **{len(main_grp):,}** rows across **{main_grp['Supplier'].nunique()}** supplier(s) "
-    f"— grouped **{group_mode}**"
+    f"Showing **{len(main_grp):,}** rows across **{main_grp['Supplier'].nunique()}** "
+    f"supplier(s) — grouped **{group_mode}**"
 )
 
 st.dataframe(
@@ -317,8 +318,8 @@ sup_grp = (
     )
     .reset_index()
 )
-sup_grp["Profit"]   = sup_grp["Sale_Total"]   - sup_grp["Invoice_Total"]
-sup_grp["Profit %"] = sup_grp.apply(
+sup_grp["Profit"]          = sup_grp["Sale_Total"] - sup_grp["Invoice_Total"]
+sup_grp["Profit %"]        = sup_grp.apply(
     lambda r: f"{r['Profit'] / r['Sale_Total'] * 100:.1f}%" if r["Sale_Total"] else "—", axis=1
 )
 sup_grp["Invoice Share %"] = sup_grp.apply(
