@@ -51,17 +51,12 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     )
     st.stop()
 
-@st.cache_resource
-def get_supabase_client():
-    from supabase import create_client
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
-
-
 # ==========================================================
 # PAGINATED FETCH
 # ==========================================================
 def fetch_all(table: str, columns: str = "*") -> list[dict]:
-    client   = get_supabase_client()
+    from supabase import create_client
+    client   = create_client(SUPABASE_URL, SUPABASE_KEY)
     page     = 0
     size     = 1000
     all_rows = []
