@@ -266,103 +266,101 @@ k4.metric("📈 Total Profit",       f"${total_profit:,.2f}",
 st.markdown("---")
 
 # ==========================================================
-# DATE GROUPING TOGGLE
+# DATE GROUPING TOGGLE — only shown in "Show All Dates" mode
 # ==========================================================
-st.markdown("### 📅 Grouped Totals")
+if show_all:
+    st.markdown("### 📅 Grouped Totals")
 
-gcol1, _ = st.columns([4, 6])
-with gcol1:
-    st.markdown("<div style='padding-top:4px; font-size:14px; color:#555'>Group by</div>",
-                unsafe_allow_html=True)
-    g1, g2, g3 = st.columns(3)
+    gcol1, _ = st.columns([4, 6])
+    with gcol1:
+        st.markdown("<div style='padding-top:4px; font-size:14px; color:#555'>Group by</div>",
+                    unsafe_allow_html=True)
+        g1, g2, g3 = st.columns(3)
 
-    if "inv_group" not in st.session_state:
-        st.session_state.inv_group = "Daily"
+        if "inv_group" not in st.session_state:
+            st.session_state.inv_group = "Daily"
 
-    with g1:
-        if st.button("📆 Daily",
-                     type="primary" if st.session_state.inv_group == "Daily" else "secondary",
-                     use_container_width=True, key="grp_daily"):
-            st.session_state.inv_group = "Daily"; st.rerun()
-    with g2:
-        if st.button("📅 Weekly",
-                     type="primary" if st.session_state.inv_group == "Weekly" else "secondary",
-                     use_container_width=True, key="grp_weekly"):
-            st.session_state.inv_group = "Weekly"; st.rerun()
-    with g3:
-        if st.button("🗓️ Monthly",
-                     type="primary" if st.session_state.inv_group == "Monthly" else "secondary",
-                     use_container_width=True, key="grp_monthly"):
-            st.session_state.inv_group = "Monthly"; st.rerun()
+        with g1:
+            if st.button("📆 Daily",
+                         type="primary" if st.session_state.inv_group == "Daily" else "secondary",
+                         use_container_width=True, key="grp_daily"):
+                st.session_state.inv_group = "Daily"; st.rerun()
+        with g2:
+            if st.button("📅 Weekly",
+                         type="primary" if st.session_state.inv_group == "Weekly" else "secondary",
+                         use_container_width=True, key="grp_weekly"):
+                st.session_state.inv_group = "Weekly"; st.rerun()
+        with g3:
+            if st.button("🗓️ Monthly",
+                         type="primary" if st.session_state.inv_group == "Monthly" else "secondary",
+                         use_container_width=True, key="grp_monthly"):
+                st.session_state.inv_group = "Monthly"; st.rerun()
 
-group_mode = st.session_state.inv_group
+    group_mode = st.session_state.inv_group
 
-# Build period label
-df_grp = df.copy()
-if group_mode == "Daily":
-    df_grp["Period"] = df_grp["date"].dt.strftime("%Y-%m-%d")
-elif group_mode == "Weekly":
-    df_grp["Period"] = (
-        df_grp["date"] - pd.to_timedelta(df_grp["date"].dt.weekday, unit="D")
-    ).dt.strftime("Week of %b %d, %Y")
-else:
-    df_grp["Period"] = df_grp["date"].dt.strftime("%B %Y")
+    # Build period label
+    df_grp = df.copy()
+    if group_mode == "Daily":
+        df_grp["Period"] = df_grp["date"].dt.strftime("%Y-%m-%d")
+    elif group_mode == "Weekly":
+        df_grp["Period"] = (
+            df_grp["date"] - pd.to_timedelta(df_grp["date"].dt.weekday, unit="D")
+        ).dt.strftime("Week of %b %d, %Y")
+    else:
+        df_grp["Period"] = df_grp["date"].dt.strftime("%B %Y")
 
-# ==========================================================
-# MAIN TABLE — Supplier × Period
-# ==========================================================
-main_grp = (
-    df_grp.groupby(["supplier", "Period"])
-    .agg(
-        Entries       = ("invoice_total", "count"),
-        Invoice_Total = ("invoice_total", "sum"),
-        Sale_Total    = ("total_sale",    "sum"),
+    main_grp = (
+        df_grp.groupby(["supplier", "Period"])
+        .agg(
+            Entries       = ("invoice_total", "count"),
+            Invoice_Total = ("invoice_total", "sum"),
+            Sale_Total    = ("total_sale",    "sum"),
+        )
+        .reset_index()
     )
-    .reset_index()
-)
-main_grp["Profit"]   = main_grp["Sale_Total"] - main_grp["Invoice_Total"]
-main_grp["Profit %"] = main_grp.apply(
-    lambda r: f"{r['Profit'] / r['Sale_Total'] * 100:.1f}%" if r["Sale_Total"] else "—", axis=1
-)
-main_grp = main_grp.rename(columns={
-    "supplier":      "Supplier",
-    "Entries":       "# Entries",
-    "Invoice_Total": "Invoice Total ($)",
-    "Sale_Total":    "Sale Total ($)",
-    "Profit":        "Profit ($)",
-})
-main_grp = main_grp.sort_values(["Supplier", "Period"]).reset_index(drop=True)
-main_grp.index += 1
+    main_grp["Profit"]   = main_grp["Sale_Total"] - main_grp["Invoice_Total"]
+    main_grp["Profit %"] = main_grp.apply(
+        lambda r: f"{r['Profit'] / r['Sale_Total'] * 100:.1f}%" if r["Sale_Total"] else "—", axis=1
+    )
+    main_grp = main_grp.rename(columns={
+        "supplier":      "Supplier",
+        "Entries":       "# Entries",
+        "Invoice_Total": "Invoice Total ($)",
+        "Sale_Total":    "Sale Total ($)",
+        "Profit":        "Profit ($)",
+    })
+    main_grp = main_grp.sort_values(["Supplier", "Period"]).reset_index(drop=True)
+    main_grp.index += 1
 
-st.info(
-    f"Showing **{len(main_grp):,}** rows across **{main_grp['Supplier'].nunique()}** "
-    f"supplier(s) — grouped **{group_mode}**"
-)
+    st.info(
+        f"Showing **{len(main_grp):,}** rows across **{main_grp['Supplier'].nunique()}** "
+        f"supplier(s) — grouped **{group_mode}**"
+    )
 
-st.dataframe(
-    main_grp,
-    use_container_width=True,
-    hide_index=False,
-    height=460,
-    column_config={
-        "Invoice Total ($)": st.column_config.NumberColumn(format="$%.2f"),
-        "Sale Total ($)":    st.column_config.NumberColumn(format="$%.2f"),
-        "Profit ($)":        st.column_config.NumberColumn(format="$%.2f"),
-    },
-)
-
-dl1, _, dl2, _ = st.columns([2, 0.3, 2, 5])
-with dl1:
-    st.download_button(
-        "📥 Download Grouped Table (.csv)",
-        data=main_grp.to_csv(index=False),
-        file_name=f"invoices_{group_mode.lower()}_{date_start}_{date_end}.csv",
-        mime="text/csv",
-        type="secondary",
+    st.dataframe(
+        main_grp,
         use_container_width=True,
+        hide_index=False,
+        height=460,
+        column_config={
+            "Invoice Total ($)": st.column_config.NumberColumn(format="$%.2f"),
+            "Sale Total ($)":    st.column_config.NumberColumn(format="$%.2f"),
+            "Profit ($)":        st.column_config.NumberColumn(format="$%.2f"),
+        },
     )
 
-st.markdown("---")
+    dl1, _, _ = st.columns([2, 0.3, 7])
+    with dl1:
+        st.download_button(
+            "📥 Download Grouped Table (.csv)",
+            data=main_grp.to_csv(index=False),
+            file_name=f"invoices_{group_mode.lower()}_{date_start}_{date_end}.csv",
+            mime="text/csv",
+            type="secondary",
+            use_container_width=True,
+        )
+
+    st.markdown("---")
 
 # ==========================================================
 # SUPPLIER SUMMARY TABLE
@@ -405,7 +403,8 @@ st.dataframe(
     },
 )
 
-with dl2:
+dl_s, _, _ = st.columns([2, 0.3, 7])
+with dl_s:
     st.download_button(
         "📥 Download Supplier Summary (.csv)",
         data=sup_grp.to_csv(index=False),
