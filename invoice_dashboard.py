@@ -30,6 +30,67 @@ def load_css():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 load_css()
+
+# Inline font-size overrides
+st.markdown("""
+<style>
+/* General page text */
+html, body, [class*="css"] {
+    font-size: 16px !important;
+}
+
+/* Dataframe cells */
+.stDataFrame iframe {
+    font-size: 15px !important;
+}
+[data-testid="stDataFrame"] td,
+[data-testid="stDataFrame"] th {
+    font-size: 15px !important;
+    padding: 10px 14px !important;
+    line-height: 1.5 !important;
+}
+
+/* Metric labels and values */
+[data-testid="stMetricLabel"] {
+    font-size: 15px !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 28px !important;
+}
+[data-testid="stMetricDelta"] {
+    font-size: 14px !important;
+}
+
+/* Info / warning / caption boxes */
+[data-testid="stCaptionContainer"],
+.stAlert p {
+    font-size: 14px !important;
+}
+
+/* Filter labels */
+label[data-testid="stWidgetLabel"] {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+}
+
+/* Selectbox / multiselect text */
+[data-testid="stMultiSelect"] span,
+[data-testid="stSelectbox"] div {
+    font-size: 15px !important;
+}
+
+/* Buttons */
+[data-testid="stButton"] button {
+    font-size: 15px !important;
+    padding: 8px 16px !important;
+}
+
+/* Info banner */
+[data-testid="stInfo"] {
+    font-size: 15px !important;
+}
+</style>
+""", unsafe_allow_html=True)
 st.title("🧾 Invoice Dashboard")
 
 # ==========================================================
@@ -318,12 +379,9 @@ sup_grp = (
     )
     .reset_index()
 )
-sup_grp["Profit"]          = sup_grp["Sale_Total"] - sup_grp["Invoice_Total"]
-sup_grp["Profit %"]        = sup_grp.apply(
+sup_grp["Profit"]   = sup_grp["Sale_Total"] - sup_grp["Invoice_Total"]
+sup_grp["Profit %"] = sup_grp.apply(
     lambda r: f"{r['Profit'] / r['Sale_Total'] * 100:.1f}%" if r["Sale_Total"] else "—", axis=1
-)
-sup_grp["Invoice Share %"] = sup_grp.apply(
-    lambda r: f"{r['Invoice_Total'] / total_invoice * 100:.1f}%" if total_invoice else "—", axis=1
 )
 sup_grp = sup_grp.rename(columns={
     "supplier":      "Supplier",
