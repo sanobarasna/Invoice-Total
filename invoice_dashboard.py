@@ -204,25 +204,19 @@ default_start = today.replace(day=1)
 if "inv_clear" not in st.session_state:
     st.session_state.inv_clear = 0
 
-fc1, fc2, fc3, fc4 = st.columns([2, 2, 3, 1])
+fc1, fc2, fc3 = st.columns([2, 3, 1])
 
 with fc1:
-    date_start = st.date_input(
-        "From",
-        value=max(default_start, min_date),
-        min_value=min_date,
-        max_value=max_date,
-        key=f"inv_start_{st.session_state.inv_clear}",
-    )
-with fc2:
-    date_end = st.date_input(
-        "To",
+    show_all = st.toggle("📋 Show All Dates", value=False, key=f"inv_all_{st.session_state.inv_clear}")
+    selected_date = st.date_input(
+        "Select Date",
         value=max_date,
         min_value=min_date,
         max_value=max_date,
-        key=f"inv_end_{st.session_state.inv_clear}",
+        key=f"inv_date_{st.session_state.inv_clear}",
+        disabled=show_all,
     )
-with fc3:
+with fc2:
     all_suppliers = sorted(df_raw["supplier"].dropna().unique())
     sel_suppliers = st.multiselect(
         "Supplier",
@@ -231,7 +225,7 @@ with fc3:
         placeholder="All suppliers",
         key=f"inv_sup_{st.session_state.inv_clear}",
     )
-with fc4:
+with fc3:
     st.markdown("<div style='padding-top:28px'>", unsafe_allow_html=True)
     if st.button("🔄 Clear", type="secondary", use_container_width=True, key="inv_clear_btn"):
         st.session_state.inv_clear += 1
@@ -240,7 +234,12 @@ with fc4:
 
 # Apply filters
 df = df_raw.copy()
-df = df[(df["date"].dt.date >= date_start) & (df["date"].dt.date <= date_end)]
+if not show_all:
+    df = df[df["date"].dt.date == selected_date]
+    date_start = date_end = selected_date
+else:
+    date_start = min_date
+    date_end   = max_date
 if sel_suppliers:
     df = df[df["supplier"].isin(sel_suppliers)]
 
