@@ -204,10 +204,11 @@ default_start = today.replace(day=1)
 if "inv_clear" not in st.session_state:
     st.session_state.inv_clear = 0
 
-fc1, fc2, fc3 = st.columns([2, 3, 1])
+fc1, fc2, fc3, fc4 = st.columns([1.5, 2, 3, 1])
 
 with fc1:
     show_all = st.toggle("📋 Show All Dates", value=False, key=f"inv_all_{st.session_state.inv_clear}")
+with fc2:
     selected_date = st.date_input(
         "Select Date",
         value=max_date,
@@ -216,7 +217,7 @@ with fc1:
         key=f"inv_date_{st.session_state.inv_clear}",
         disabled=show_all,
     )
-with fc2:
+with fc3:
     all_suppliers = sorted(df_raw["supplier"].dropna().unique())
     sel_suppliers = st.multiselect(
         "Supplier",
@@ -225,7 +226,7 @@ with fc2:
         placeholder="All suppliers",
         key=f"inv_sup_{st.session_state.inv_clear}",
     )
-with fc3:
+with fc4:
     st.markdown("<div style='padding-top:28px'>", unsafe_allow_html=True)
     if st.button("🔄 Clear", type="secondary", use_container_width=True, key="inv_clear_btn"):
         st.session_state.inv_clear += 1
