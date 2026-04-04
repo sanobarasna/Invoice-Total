@@ -1,3 +1,5 @@
 httpx
 pandas
 pytz
+xlwings
+
